@@ -241,10 +241,10 @@ ollama pull llava
 
 ### 1. Clone the Repository
 
-```bash
-git clone https://github.com/yourusername/agentric-ai.git
-cd agentric-ai
-```
+'''bash
+git clone https://github.com/BAMmyers/AgentricAI-IED-ollama.git
+cd AgentricAI-IED-ollama
+'''
 
 ### 2. Install Dependencies
 
@@ -636,4 +636,5 @@ SOFTWARE.
 <p align="center">
   <strong>Built with 🧠 by AgentricAI</strong>
 </p>
+
 
