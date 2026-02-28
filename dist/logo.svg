@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a1a"/>
+      <stop offset="100%" style="stop-color:#141428"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00f0ff"/>
+      <stop offset="50%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#ff00ff"/>
+    </linearGradient>
+    <linearGradient id="inner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00f0ff;stop-opacity:0.8"/>
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:0.8"/>
+    </linearGradient>
+    <filter id="glow-filter">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="248" fill="url(#bg)" stroke="url(#glow)" stroke-width="3"/>
+  <!-- Outer ring -->
+  <circle cx="256" cy="256" r="220" fill="none" stroke="url(#glow)" stroke-width="1.5" opacity="0.3"/>
+  <!-- Circuit lines -->
+  <path d="M 128 256 L 180 256 L 200 236" stroke="#00f0ff" stroke-width="1.5" opacity="0.4" fill="none"/>
+  <path d="M 384 256 L 332 256 L 312 276" stroke="#ff00ff" stroke-width="1.5" opacity="0.4" fill="none"/>
+  <path d="M 256 128 L 256 180 L 276 200" stroke="#8b5cf6" stroke-width="1.5" opacity="0.4" fill="none"/>
+  <path d="M 256 384 L 256 332 L 236 312" stroke="#00f0ff" stroke-width="1.5" opacity="0.4" fill="none"/>
+  <!-- Node dots -->
+  <circle cx="128" cy="256" r="4" fill="#00f0ff" opacity="0.6"/>
+  <circle cx="384" cy="256" r="4" fill="#ff00ff" opacity="0.6"/>
+  <circle cx="256" cy="128" r="4" fill="#8b5cf6" opacity="0.6"/>
+  <circle cx="256" cy="384" r="4" fill="#00f0ff" opacity="0.6"/>
+  <!-- Central hexagon shape -->
+  <polygon points="256,160 330,198 330,314 256,352 182,314 182,198" 
+           fill="none" stroke="url(#glow)" stroke-width="2.5" filter="url(#glow-filter)"/>
+  <!-- Inner triangle / AI symbol -->
+  <polygon points="256,190 305,290 207,290" 
+           fill="none" stroke="url(#inner)" stroke-width="2.5"/>
+  <!-- AI eye / core -->
+  <circle cx="256" cy="260" r="18" fill="url(#glow)" opacity="0.9" filter="url(#glow-filter)"/>
+  <circle cx="256" cy="260" r="8" fill="#0a0a1a"/>
+  <circle cx="256" cy="260" r="4" fill="#00f0ff"/>
+  <!-- Text: AAI -->
+  <text x="256" y="430" text-anchor="middle" font-family="sans-serif" font-weight="800" font-size="52" fill="url(#glow)" letter-spacing="8">
+    AgentricAI
+  </text>
+</svg>
