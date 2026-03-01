@@ -7,7 +7,7 @@ import {
   FolderOpen, Folder, Bot, Database, Search,
   Eye, EyeOff, Brain, Cpu, Wrench, Monitor,
   PenTool, LifeBuoy, Atom, GraduationCap, Orbit,
-  Code, ChevronUp, ChevronsUpDown,
+  Code, ChevronUp, ChevronsUpDown, Users, UserPlus, UserMinus,
 } from 'lucide-react';
 import type { Agent } from '../types';
 import { cn } from '../utils/cn';
@@ -48,6 +48,10 @@ interface SidebarProps {
   onRunAgent: (id: string) => void;
   isConnected: boolean;
   onCheckConnection: () => void;
+  // Team selection
+  selectedTeam: string[];
+  onToggleTeamAgent: (id: string) => void;
+  onClearTeam: () => void;
 }
 
 export function Sidebar({
@@ -59,6 +63,9 @@ export function Sidebar({
   onRunAgent,
   isConnected,
   onCheckConnection,
+  selectedTeam,
+  onToggleTeamAgent,
+  onClearTeam,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set(['Consciousness', 'Core \\ System']));
@@ -210,6 +217,30 @@ export function Sidebar({
         </div>
       )}
 
+      {/* ── Team Selection Status ── */}
+      {!collapsed && selectedTeam.length > 0 && (
+        <div className="px-2 mt-2">
+          <div className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg bg-magenta/10 border border-magenta/30">
+            <div className="flex items-center gap-2">
+              <Users size={12} className="text-magenta" />
+              <span className="text-[10px] font-semibold text-magenta">Team Selected</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="px-1.5 py-0.5 rounded-full bg-magenta/20 text-magenta text-[8px] font-bold">
+                {selectedTeam.length} agents
+              </span>
+              <button
+                onClick={onClearTeam}
+                className="p-1 rounded hover:bg-magenta/20 text-magenta/70 hover:text-magenta transition-colors"
+                title="Clear team selection"
+              >
+                <Trash2 size={10} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Agent Roster Header ── */}
       {!collapsed && (
         <div className="flex items-center justify-between px-3 mt-3 mb-1">
@@ -337,6 +368,9 @@ export function Sidebar({
                         onSelect={() => onSelectAgent(agent.id)}
                         onRun={() => onRunAgent(agent.id)}
                         onDelete={() => onDeleteAgent(agent.id)}
+                        isInTeam={selectedTeam.includes(agent.id)}
+                        teamOrder={selectedTeam.indexOf(agent.id) + 1}
+                        onToggleTeam={() => onToggleTeamAgent(agent.id)}
                       />
                     ))}
                   </div>
@@ -394,6 +428,9 @@ function AgentCard({
   onSelect,
   onRun,
   onDelete,
+  isInTeam,
+  teamOrder,
+  onToggleTeam,
 }: {
   agent: Agent;
   isSelected: boolean;
@@ -402,21 +439,38 @@ function AgentCard({
   onSelect: () => void;
   onRun: () => void;
   onDelete: () => void;
+  isInTeam: boolean;
+  teamOrder: number;
+  onToggleTeam: () => void;
 }) {
   return (
     <div
       onClick={onSelect}
       className={cn(
-        'group flex items-start gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-150',
+        'group relative flex items-start gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-150',
         isSelected
           ? 'bg-raised border border-border-glow/40'
-          : 'hover:bg-surface/60 border border-transparent'
+          : 'hover:bg-surface/60 border border-transparent',
+        isInTeam && 'ring-1 ring-magenta/50 bg-magenta/5'
       )}
     >
-      {/* Avatar + Status */}
+      {/* Team Order Badge - shows when agent is in team */}
+      {isInTeam && (
+        <div 
+          className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-magenta text-void text-[8px] font-bold flex items-center justify-center shadow-lg shadow-magenta/30 z-10"
+          title={`Team position #${teamOrder}`}
+        >
+          {teamOrder}
+        </div>
+      )}
+
+      {/* Avatar */}
       <div className="flex flex-col items-center gap-1 pt-0.5 flex-shrink-0">
         <div
-          className="w-6 h-6 rounded-md flex items-center justify-center text-void text-[10px] font-bold"
+          className={cn(
+            "w-6 h-6 rounded-md flex items-center justify-center text-void text-[10px] font-bold transition-all",
+            isInTeam && "ring-2 ring-magenta ring-offset-1 ring-offset-void"
+          )}
           style={{ backgroundColor: categoryColor }}
         >
           {agent.name.charAt(0)}
@@ -432,7 +486,19 @@ function AgentCard({
 
       {/* Agent info */}
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-semibold text-text-primary truncate leading-tight">{agent.name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className={cn(
+            'text-[10px] font-semibold truncate leading-tight',
+            isInTeam ? 'text-magenta' : 'text-text-primary'
+          )}>
+            {agent.name}
+          </p>
+          {isInTeam && (
+            <span className="text-[7px] px-1 py-px rounded bg-magenta/20 text-magenta font-semibold uppercase tracking-wider">
+              Team
+            </span>
+          )}
+        </div>
         {showDetails && (
           <>
             <p className="text-[8px] text-text-muted leading-snug mt-0.5 line-clamp-2">{agent.role}</p>
@@ -448,19 +514,36 @@ function AgentCard({
         )}
       </div>
 
-      {/* Actions */}
+      {/* Action Buttons - visible on hover */}
       <div className="flex flex-col items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 pt-0.5">
+        {/* Run/Pause Button */}
         <button
           onClick={(e) => { e.stopPropagation(); onRun(); }}
-          className="p-1 rounded hover:bg-highlight text-emerald-glow"
-          title={agent.status === 'running' ? 'Pause' : 'Run'}
+          className="p-1 rounded hover:bg-emerald-glow/20 text-emerald-glow transition-colors"
+          title={agent.status === 'running' ? 'Pause agent' : 'Run agent'}
         >
           {agent.status === 'running' ? <Pause size={10} /> : <Play size={10} />}
         </button>
+        
+        {/* Select/Deselect for Team Button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleTeam(); }}
+          className={cn(
+            "p-1 rounded transition-colors",
+            isInTeam 
+              ? "bg-magenta/20 text-magenta hover:bg-magenta/30" 
+              : "hover:bg-magenta/20 text-text-muted hover:text-magenta"
+          )}
+          title={isInTeam ? 'Remove from team' : 'Add to team'}
+        >
+          {isInTeam ? <UserMinus size={10} /> : <UserPlus size={10} />}
+        </button>
+        
+        {/* Delete Button */}
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="p-1 rounded hover:bg-highlight text-red-glow"
-          title="Delete"
+          className="p-1 rounded hover:bg-red-glow/20 text-red-glow transition-colors"
+          title="Delete agent"
         >
           <Trash2 size={10} />
         </button>

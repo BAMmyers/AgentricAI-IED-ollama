@@ -23,6 +23,7 @@
 <p align="center">
   <a href="#installation">Installation</a> •
   <a href="#features">Features</a> •
+  <a href="#-team-builder--multi-agent-execution">Team Builder</a> •
   <a href="#usage">Usage</a> •
   <a href="#terminal-commands">Commands</a> •
   <a href="#contributing">Contributing</a>
@@ -31,6 +32,21 @@
 <p align="center">
   A futuristic, dark-themed IDE for orchestrating 101 specialized AI agents powered by <a href="https://ollama.ai">Ollama</a> for fully offline, privacy-first LLM execution.
 </p>
+
+---
+
+## 🆕 What's New — v1.1
+
+### Team Builder — Multi-Agent Execution
+> Assemble a team of agents and execute them as a coordinated unit!
+
+- **👤+ Select Button** — Hover over any agent, click to add to team
+- **Drag-to-Reorder** — Arrange agents in execution order
+- **Chain-of-Thought** — Each agent receives previous agents' responses
+- **Real-time Status** — Watch each agent process in sequence
+- **Execution Report** — Success/fail summary with timing
+
+[📖 Full Team Builder Documentation](#-team-builder--multi-agent-execution)
 
 ---
 
@@ -60,6 +76,7 @@ npm run dev
 
 ## Table of Contents
 
+- [What's New](#-whats-new--v11)
 - [Overview](#overview)
 - [Features](#features)
 - [Architecture](#architecture)
@@ -68,6 +85,7 @@ npm run dev
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
+- [Team Builder](#-team-builder--multi-agent-execution)
 - [Terminal Commands](#terminal-commands)
 - [API Reference](#api-reference)
 - [Project Structure](#project-structure)
@@ -88,6 +106,9 @@ npm run dev
 
 ### Agent Roster
 > 101 agents organized into 19 collapsible category folders with search and filtering
+
+### Team Builder
+> Select agents with toggle buttons, reorder with drag-and-drop, execute as coordinated team
 
 ### Workflow Builder
 > Visual pipeline builder for chaining agents into multi-step workflows
@@ -130,6 +151,7 @@ AgentricAI is a browser-based multi-agent orchestration platform designed for de
 |---------|-------------|
 | **101 Pre-built Agents** | Specialized agents for security, development, research, quantum studies, and more |
 | **19 Category Folders** | Organized agent roster with collapsible folders and search |
+| **🆕 Team Builder** | Select multiple agents with toggle buttons, reorder, and execute as a coordinated team |
 | **Workflow Builder** | Visual pipeline builder to chain agents into multi-step workflows |
 | **Streaming Responses** | Real-time token-by-token output from Ollama |
 | **Code Workspace** | Tabbed editor with syntax highlighting and line numbers |
@@ -172,12 +194,12 @@ AgentricAI is a browser-based multi-agent orchestration platform designed for de
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  ┌─────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐ │
-│  │   Sidebar   │  │  Code Workspace │  │      Workflow Panel         │ │
+│  │   Sidebar   │  │  Code Workspace │  │   Workflow / Team Panel     │ │
 │  │             │  │                 │  │                             │ │
 │  │ • 19 Cats   │  │ • Tabbed Editor │  │ • Pipeline Builder          │ │
-│  │ • 101 Agents│  │ • Chat View     │  │ • Step Execution            │ │
-│  │ • Search    │  │ • File Editing  │  │ • Status Tracking           │ │
-│  │ • Create    │  │ • Streaming     │  │ • Re-run Capability         │ │
+│  │ • 101 Agents│  │ • Chat View     │  │ • Team Builder              │ │
+│  │ • Search    │  │ • File Editing  │  │ • Multi-Agent Execution     │ │
+│  │ • Team Toggle│ │ • Streaming     │  │ • Chain-of-Thought          │ │
 │  └─────────────┘  └─────────────────┘  └─────────────────────────────┘ │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
@@ -401,6 +423,104 @@ All agents are defined in `src/data/agentRoster.ts`. To modify:
 
 ---
 
+## 👥 Team Builder — Multi-Agent Execution
+
+The **Team Builder** enables you to assemble a team of agents and execute them sequentially on a shared mission. Each agent receives the combined context of all previous agent responses, creating a powerful chain-of-thought workflow.
+
+### Selecting Agents
+
+1. **Hover over any agent** in the roster sidebar
+2. Three action buttons appear:
+   - ▶️ **Play** — Run this agent individually
+   - 👤+ **Select** — Toggle this agent into/out of the team
+   - 🗑️ **Delete** — Remove this agent
+3. **Click Select** to add the agent to your team
+4. A magenta highlight and order badge (#1, #2, #3...) shows selected agents
+
+### Team Panel
+
+When you select your first agent, the **Team Panel** opens automatically:
+
+| Element | Function |
+|---------|----------|
+| **Agent List** | Shows all selected agents with drag handles |
+| **↑/↓ Arrows** | Reorder agents (or drag-and-drop) |
+| **✕ Remove** | Remove agent from team |
+| **Mission Input** | Enter the objective for all agents |
+| **Execute Button** | Run the full team workflow |
+| **Clear Team** | Deselect all agents |
+
+### Execution Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Mission Objective                          │
+│              "Analyze auth module for vulnerabilities"          │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Agent #1: ThreatPatternMatcher                                 │
+│  Input: Mission objective                                       │
+│  Output: "Found 3 patterns matching known vulnerabilities..."   │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │ (passes response to next agent)
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Agent #2: CodeRefactorSuggestor                                │
+│  Input: Mission + Agent #1's analysis                           │
+│  Output: "Recommend refactoring the JWT validation logic..."    │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │ (passes combined responses)
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Agent #3: BugHunter                                            │
+│  Input: Mission + Agent #1 + Agent #2 responses                 │
+│  Output: "Verified fix resolves CVE-2024-XXXX..."               │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │ Execution Report │
+                    │ 3/3 Success      │
+                    │ Total: 12.4s     │
+                    └─────────────────┘
+```
+
+### Visual Indicators
+
+| Indicator | Meaning |
+|-----------|---------|
+| 🟣 Magenta ring on agent card | Agent is selected for team |
+| `#1` `#2` `#3` badges | Execution order |
+| Team count badge (activity bar) | Number of agents selected |
+| "Team Selected" banner (sidebar) | Quick summary + clear button |
+| Status dots during execution | ⏳ Pending → 🔄 Running → ✅ Success / ❌ Error |
+
+### Example Team Workflow
+
+**Security Audit Team:**
+1. **ThreatPatternMatcher** — Scan for known vulnerability patterns
+2. **AnomalyDetectionEngine** — Identify unusual code patterns  
+3. **CodeRefactorSuggestor** — Recommend fixes
+4. **EthicalComplianceOfficer** — Review for compliance issues
+5. **IncidentReporter** — Generate formal audit report
+
+**Research Team:**
+1. **DrEvelynReedPhysics** — Analyze scientific feasibility
+2. **NickTesla** — Explore theoretical possibilities
+3. **LongTermViabilityAnalyst** — Assess sustainability
+4. **ContentSummarizer** — Create executive summary
+
+### Terminal Commands
+
+| Command | Description |
+|---------|-------------|
+| `team` | Display current team selection |
+| `team-clear` | Clear all selected agents |
+
+---
+
 ## Terminal Commands
 
 | Command | Description |
@@ -416,6 +536,8 @@ All agents are defined in `src/data/agentRoster.ts`. To modify:
 | `pull <model>` | Pull a new model from Ollama registry |
 | `log` | Download debug log as `debug-log.txt` |
 | `default` | Show default model information |
+| `team` | Show current team selection with agent names |
+| `team-clear` | Clear all selected team agents |
 
 ### Example Session
 
@@ -441,6 +563,15 @@ All agents are defined in `src/data/agentRoster.ts`. To modify:
 [AgentricAI] ✓ Collective Consciousness initialized (1.2s)
 ...
 [AgentricAI] Initialization complete. 101/101 agents ready.
+
+> team
+[AgentricAI] Current Team (3 agents):
+  #1 ThreatPatternMatcher (Security)
+  #2 CodeRefactorSuggestor (Development \ Code)
+  #3 IncidentReporter (Security Reporting)
+
+> team-clear
+[AgentricAI] Team cleared.
 
 > log
 [AgentricAI] Downloading debug-log.txt...
@@ -520,7 +651,8 @@ agentric-ai/
 │   │   ├── CodeWorkspace.tsx    # Tabbed editor + chat view
 │   │   ├── CreateAgentModal.tsx # Agent creation form
 │   │   ├── FileTree.tsx         # File explorer component
-│   │   ├── Sidebar.tsx          # Agent roster with categories
+│   │   ├── Sidebar.tsx          # Agent roster with team toggles
+│   │   ├── TeamPanel.tsx        # Multi-agent team builder & executor
 │   │   ├── TerminalPanel.tsx    # Command-line interface
 │   │   └── WorkflowPanel.tsx    # Workflow builder
 │   ├── data/

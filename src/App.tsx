@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Code, Workflow, MessageSquare, Settings, Layers,
-  Monitor, RefreshCw, Database
+  Monitor, RefreshCw, Database, Users
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { CreateAgentModal } from './components/CreateAgentModal';
@@ -9,6 +9,7 @@ import { FileTree } from './components/FileTree';
 import { CodeWorkspace } from './components/CodeWorkspace';
 import { TerminalPanel } from './components/TerminalPanel';
 import { WorkflowPanel } from './components/WorkflowPanel';
+import { TeamPanel, TeamExecutionResult } from './components/TeamPanel';
 import { useOllama, DEFAULT_MODEL } from './hooks/useOllama';
 import { DEFAULT_AGENTS } from './data/agentRoster';
 import type {
@@ -172,6 +173,12 @@ export default function App() {
   const [workflows, setWorkflows] = useState<WorkflowType[]>([]);
   const [activeView, setActiveView] = useState<string>('editor');
   const [showFileTree, setShowFileTree] = useState(true);
+
+  // Team Builder state
+  const [selectedTeam, setSelectedTeam] = useState<string[]>([]);
+  const [isTeamExecuting, setIsTeamExecuting] = useState(false);
+  const [teamExecutionResults, setTeamExecutionResults] = useState<TeamExecutionResult[]>([]);
+  const [showTeamPanel, setShowTeamPanel] = useState(false);
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || null;
 
@@ -422,6 +429,159 @@ export default function App() {
     }
   };
 
+  // Team Builder handlers
+  const handleToggleTeamAgent = (id: string) => {
+    setSelectedTeam(prev => {
+      const newTeam = prev.includes(id) 
+        ? prev.filter(agentId => agentId !== id)
+        : [...prev, id];
+      
+      // Auto-show team panel when first agent is added
+      if (newTeam.length > 0 && !prev.includes(id)) {
+        setShowTeamPanel(true);
+      }
+      // Auto-hide team panel when last agent is removed
+      if (newTeam.length === 0) {
+        setShowTeamPanel(false);
+      }
+      
+      return newTeam;
+    });
+  };
+
+  const handleReorderTeam = (newTeam: string[]) => {
+    setSelectedTeam(newTeam);
+  };
+
+  const handleClearTeam = () => {
+    setSelectedTeam([]);
+    setTeamExecutionResults([]);
+  };
+
+  // Team mode is now automatic - toggled when team has members
+
+  const handleExecuteTeam = async (mission: string) => {
+    if (selectedTeam.length === 0 || !ollama.isConnected) {
+      addTerminalLine('error', 'Cannot execute team: No agents selected or Ollama offline');
+      return;
+    }
+
+    setIsTeamExecuting(true);
+    setTeamExecutionResults([]);
+
+    addTerminalLine('system', '═══════════════════════════════════════════════════════════');
+    addTerminalLine('system', '  AGENTRIC AI — TEAM EXECUTION WORKFLOW');
+    addTerminalLine('system', `  Mission: ${mission.slice(0, 60)}${mission.length > 60 ? '...' : ''}`);
+    addTerminalLine('system', `  Team: ${selectedTeam.length} agents`);
+    addTerminalLine('system', '═══════════════════════════════════════════════════════════');
+    logDebug(`TEAM EXEC START: ${selectedTeam.length} agents | Mission: ${mission}`);
+
+    const results: TeamExecutionResult[] = [];
+    let previousResponses = '';
+
+    for (let i = 0; i < selectedTeam.length; i++) {
+      const agentId = selectedTeam[i];
+      const agent = agents.find(a => a.id === agentId);
+      
+      if (!agent) {
+        results.push({
+          agentId,
+          agentName: 'Unknown',
+          model: 'N/A',
+          status: 'error',
+          error: 'Agent not found',
+        });
+        continue;
+      }
+
+      // Add pending result
+      const pendingResult: TeamExecutionResult = {
+        agentId: agent.id,
+        agentName: agent.name,
+        model: agent.model,
+        status: 'running',
+      };
+      setTeamExecutionResults([...results, pendingResult]);
+
+      // Update agent status
+      setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status: 'running' as const } : a));
+
+      addTerminalLine('agent', `[${i + 1}/${selectedTeam.length}] ${agent.name} (${agent.model}) executing...`, agent.name, agent.color);
+
+      const startTime = Date.now();
+
+      try {
+        // Build context from previous responses
+        let fullPrompt = `## Mission Objective\n${mission}\n\n`;
+        
+        if (previousResponses) {
+          fullPrompt += `## Previous Agent Responses\n${previousResponses}\n\n`;
+        }
+        
+        fullPrompt += `## Your Task\nAs ${agent.name}, analyze the mission objective${previousResponses ? ' and previous agent responses' : ''}, then provide your expert contribution based on your role: ${agent.role}`;
+
+        const response = await ollama.generate(
+          agent.model,
+          fullPrompt,
+          agent.systemPrompt,
+          undefined,
+          agent.temperature,
+          agent.maxTokens
+        );
+
+        const duration = Date.now() - startTime;
+        const finalResponse = response || `No response from ${agent.name}`;
+
+        // Add to previous responses for next agent
+        previousResponses += `\n### ${agent.name} (${agent.category})\n${finalResponse}\n`;
+
+        results.push({
+          agentId: agent.id,
+          agentName: agent.name,
+          model: agent.model,
+          status: 'success',
+          response: finalResponse,
+          duration,
+        });
+
+        setTeamExecutionResults([...results]);
+        setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status: 'success' as const } : a));
+        addTerminalLine('output', `  ✓ ${agent.name}: Completed (${(duration / 1000).toFixed(1)}s)`);
+        logDebug(`TEAM AGENT OK: ${agent.name} | ${duration}ms | ${finalResponse.length} chars`);
+
+      } catch (err) {
+        const duration = Date.now() - startTime;
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+
+        results.push({
+          agentId: agent.id,
+          agentName: agent.name,
+          model: agent.model,
+          status: 'error',
+          error: errorMsg,
+          duration,
+        });
+
+        setTeamExecutionResults([...results]);
+        setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status: 'error' as const } : a));
+        addTerminalLine('error', `  ✗ ${agent.name}: Failed - ${errorMsg}`);
+        logDebug(`TEAM AGENT ERROR: ${agent.name} | ${errorMsg}`);
+      }
+    }
+
+    const successCount = results.filter(r => r.status === 'success').length;
+    const failCount = results.filter(r => r.status === 'error').length;
+    const totalTime = results.reduce((sum, r) => sum + (r.duration || 0), 0);
+
+    addTerminalLine('system', '───────────────────────────────────────────────────────────');
+    addTerminalLine('system', `  TEAM EXECUTION COMPLETE: ${successCount} OK, ${failCount} FAILED`);
+    addTerminalLine('system', `  Total Time: ${(totalTime / 1000).toFixed(1)}s`);
+    addTerminalLine('system', '═══════════════════════════════════════════════════════════');
+    logDebug(`TEAM EXEC COMPLETE: Success=${successCount}, Failed=${failCount}, Time=${totalTime}ms`);
+
+    setIsTeamExecuting(false);
+  };
+
   // File management
   const handleSelectFile = (node: FileNode) => {
     if (node.type === 'file') {
@@ -454,6 +614,8 @@ export default function App() {
         addTerminalLine('output', '  models              — List all installed Ollama models');
         addTerminalLine('output', '  run <agent>         — Activate an agent by name');
         addTerminalLine('output', '  workflows           — List workflows');
+        addTerminalLine('output', '  team                — Show selected team agents');
+        addTerminalLine('output', '  team-clear          — Clear team selection');
         addTerminalLine('output', '  pull <model>        — Pull an Ollama model');
         addTerminalLine('output', '  log                 — Download debug log');
         addTerminalLine('output', '  default             — Show default model info');
@@ -564,6 +726,27 @@ export default function App() {
         break;
       case 'clear':
         setTerminalLines([]);
+        break;
+      case 'team':
+        if (selectedTeam.length === 0) {
+          addTerminalLine('output', 'No agents selected for team.');
+          addTerminalLine('output', '  Enable Team Builder mode in the sidebar to select agents.');
+        } else {
+          addTerminalLine('system', `Team Builder: ${selectedTeam.length} agents selected`);
+          addTerminalLine('output', '  Execution Order:');
+          selectedTeam.forEach((id, i) => {
+            const agent = agents.find(a => a.id === id);
+            if (agent) {
+              addTerminalLine('output', `    ${i + 1}. ${agent.name} (${agent.model})`);
+            }
+          });
+          addTerminalLine('output', '');
+          addTerminalLine('output', '  Use the Team Panel to enter a mission and execute.');
+        }
+        break;
+      case 'team-clear':
+        handleClearTeam();
+        addTerminalLine('system', 'Team cleared.');
         break;
       default:
         addTerminalLine('error', `Unknown command: ${command}. Type "help" for available commands.`);
@@ -768,6 +951,9 @@ export default function App() {
           onRunAgent={handleRunAgent}
           isConnected={ollama.isConnected}
           onCheckConnection={ollama.checkConnection}
+          selectedTeam={selectedTeam}
+          onToggleTeamAgent={handleToggleTeamAgent}
+          onClearTeam={handleClearTeam}
         />
 
         {/* Activity Bar */}
@@ -818,6 +1004,23 @@ export default function App() {
           >
             <Workflow size={16} />
           </button>
+          <button
+            onClick={() => {
+              setShowTeamPanel(!showTeamPanel);
+            }}
+            className={cn(
+              'p-2 rounded-lg transition-colors relative',
+              showTeamPanel ? 'bg-magenta/20 text-magenta' : 'text-text-muted hover:text-text-secondary'
+            )}
+            title="Team Builder"
+          >
+            <Users size={16} />
+            {selectedTeam.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-magenta text-void text-[8px] font-bold flex items-center justify-center">
+                {selectedTeam.length}
+              </span>
+            )}
+          </button>
           <div className="flex-1" />
           <button
             className="p-2 rounded-lg text-text-muted hover:text-text-secondary transition-colors"
@@ -834,6 +1037,22 @@ export default function App() {
               files={DEMO_FILES}
               selectedPath={activeFile?.path || null}
               onSelectFile={handleSelectFile}
+            />
+          </div>
+        )}
+
+        {/* Team Panel */}
+        {showTeamPanel && (
+          <div className="w-72 flex-shrink-0">
+            <TeamPanel
+              agents={agents}
+              selectedTeam={selectedTeam}
+              onToggleAgent={handleToggleTeamAgent}
+              onReorderTeam={handleReorderTeam}
+              onClearTeam={handleClearTeam}
+              onExecuteTeam={handleExecuteTeam}
+              isExecuting={isTeamExecuting}
+              executionResults={teamExecutionResults}
             />
           </div>
         )}
