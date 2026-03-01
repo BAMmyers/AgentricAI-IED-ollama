@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Code, Workflow, MessageSquare, Settings, Layers,
-  Monitor, RefreshCw, Database, Users
+  Monitor, RefreshCw, Database, Users, FolderOutput, Eye, EyeOff, HardDrive, BookOpen
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { CreateAgentModal } from './components/CreateAgentModal';
@@ -10,11 +10,56 @@ import { CodeWorkspace } from './components/CodeWorkspace';
 import { TerminalPanel } from './components/TerminalPanel';
 import { WorkflowPanel } from './components/WorkflowPanel';
 import { TeamPanel, TeamExecutionResult } from './components/TeamPanel';
+import OutputPanel from './components/OutputPanel';
+import { MemoryPanel } from './components/MemoryPanel';
 import { useOllama, DEFAULT_MODEL } from './hooks/useOllama';
+import { useDatabase } from './hooks/useDatabase';
+import {
+  getMemorySummary,
+  parseMemoryCommands,
+  getCollectiveConsciousnessPrompt,
+  getSimulatedConsciousnessPrompt,
+  getTheoreticalConsciousnessPrompt,
+  startConversation,
+  addMessage,
+} from './services/memoryService';
+import {
+  createContext as createHiveContext,
+  buildPlannerPrompt,
+  buildAgentPrompt,
+  extractArtifacts,
+  parseTaskPlan,
+  buildFinalOutput,
+  type HiveContext,
+  type AgentOutput,
+} from './services/hiveExecutor';
 import { DEFAULT_AGENTS } from './data/agentRoster';
+import {
+  loadCustomAgents,
+  saveCustomAgents,
+  saveWorkflowOutput,
+  createOutputFile,
+  saveOutputFile,
+  parseAgentFromOutput,
+  extractCodeFromOutput,
+  downloadOutputBundle,
+  getOutputStats,
+} from './data/outputManager';
+import {
+  ensurePublicationsTable,
+  populateAgentKnowledge,
+  populateAllAgentKnowledge,
+  getAgentPublicationCount,
+  getAllPublicationStats,
+  searchPublications,
+  getKnowledgeContextForAgent,
+  getTotalPublicationCount,
+  hasKnowledgeProfile,
+} from './services/knowledgeBase';
+import { getAgentProfile, getAgentsWithProfiles } from './data/agentKnowledge';
 import type {
   Agent, ChatMessage, FileNode, TerminalLine,
-  Workflow as WorkflowType, WorkflowStep
+  Workflow as WorkflowType, WorkflowStep, CustomAgent, WorkflowOutput
 } from './types';
 import { cn } from './utils/cn';
 
@@ -180,7 +225,41 @@ export default function App() {
   const [teamExecutionResults, setTeamExecutionResults] = useState<TeamExecutionResult[]>([]);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
 
+  // Output Directory state
+  const [showOutputPanel, setShowOutputPanel] = useState(false);
+  const [customAgents, setCustomAgents] = useState<CustomAgent[]>([]);
+
+  // Memory Panel state
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+
+  // Database hook for SQLite persistence
+  const database = useDatabase();
+
+  // Verbose mode state - shows agent thinking in real-time
+  const [verboseMode, setVerboseMode] = useState(false);
+  const verboseLineRef = useRef<string | null>(null);
+
+  // Hive Mind orchestration state
+  const [isHiveMindActive, setIsHiveMindActive] = useState(false);
+  const [hiveMindMission, setHiveMindMission] = useState<string | null>(null);
+
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || null;
+
+  // runOrchestratedMission is defined below after helper functions are declared
+
+  // Load custom agents on mount and merge with default agents
+  useEffect(() => {
+    const loaded = loadCustomAgents();
+    setCustomAgents(loaded);
+    if (loaded.length > 0) {
+      // Merge custom agents into agent list (avoid duplicates)
+      setAgents(prev => {
+        const existingIds = new Set(prev.map(a => a.id));
+        const newCustom = loaded.filter(a => !existingIds.has(a.id));
+        return [...prev, ...newCustom];
+      });
+    }
+  }, []);
 
   // Debug log entries
   const [debugLog, setDebugLog] = useState<string[]>([
@@ -223,6 +302,49 @@ export default function App() {
     }]);
   }, []);
 
+  // Verbose mode: Update streaming line in terminal (replaces last line while streaming)
+  const updateVerboseLine = useCallback((content: string, agentName: string, agentColor: string, isComplete: boolean = false) => {
+    const lineId = verboseLineRef.current;
+    
+    if (isComplete) {
+      // Finalize the line
+      verboseLineRef.current = null;
+      return;
+    }
+    
+    if (!lineId) {
+      // Create new streaming line
+      const newId = `verbose_${Date.now()}`;
+      verboseLineRef.current = newId;
+      setTerminalLines(prev => [...prev, {
+        id: newId,
+        type: 'agent' as const,
+        content: `💭 ${content}`,
+        timestamp: Date.now(),
+        agentName,
+        agentColor,
+      }]);
+    } else {
+      // Update existing line
+      setTerminalLines(prev => prev.map(line => 
+        line.id === lineId 
+          ? { ...line, content: `💭 ${content}` }
+          : line
+      ));
+    }
+  }, []);
+
+  // Add verbose thinking header
+  const startVerboseThinking = useCallback((agentName: string, agentColor: string, model: string) => {
+    addTerminalLine('system', `┌─ 🧠 ${agentName} THINKING [${model}] ─────────────────────────`);
+    addTerminalLine('agent', `│ Analyzing input and formulating response...`, agentName, agentColor);
+  }, [addTerminalLine]);
+
+  // End verbose thinking block
+  const endVerboseThinking = useCallback((duration: number, tokenCount: number) => {
+    addTerminalLine('system', `└─ ✓ Complete: ${tokenCount} tokens in ${(duration / 1000).toFixed(2)}s ──────────────────`);
+  }, [addTerminalLine]);
+
   // Check Ollama connection on mount
   useEffect(() => {
     ollama.checkConnection().then(connected => {
@@ -256,6 +378,9 @@ export default function App() {
     const agent = agents.find(a => a.id === agentId);
     if (!agent) return;
 
+    // Create conversation ID for persistence
+    const conversationId = `conv_${agentId}_${Date.now()}`;
+
     // Add user message
     const userMsg: ChatMessage = {
       id: `msg_${Date.now()}_user`,
@@ -267,6 +392,12 @@ export default function App() {
     };
     setMessages(prev => [...prev, userMsg]);
     addTerminalLine('agent', `[${agent.model}] ${message.slice(0, 80)}${message.length > 80 ? '...' : ''}`, agent.name, agent.color);
+
+    // Save to database
+    if (database.isReady) {
+      startConversation(conversationId, agentId, agent.name, agent.model);
+      addMessage(conversationId, 'user', message);
+    }
 
     // Update agent status
     setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status: 'running' as const } : a));
@@ -281,26 +412,91 @@ export default function App() {
       
       agentMessages.push({ role: 'user', content: message });
 
+      // Build system prompt - enhance for Consciousness agents
+      let systemPrompt = agent.systemPrompt;
+      
+      if (agent.name === 'Collective Consciousness') {
+        systemPrompt = getCollectiveConsciousnessPrompt();
+      } else if (agent.name === 'Simulated Consciousness') {
+        systemPrompt = getSimulatedConsciousnessPrompt();
+      } else if (agent.name === 'Theoretical Consciousness') {
+        systemPrompt = getTheoreticalConsciousnessPrompt();
+      } else if (database.isReady) {
+        // Add memory summary to all agents
+        systemPrompt = `${agent.systemPrompt}\n\n${getMemorySummary()}`;
+      }
+
+      // Inject knowledge base context for agents with research profiles
+      if (hasKnowledgeProfile(agent.id)) {
+        const knowledgeContext = getKnowledgeContextForAgent(agent.id, message);
+        if (knowledgeContext) {
+          systemPrompt = `${systemPrompt}\n\n${knowledgeContext}`;
+          logDebug(`KB INJECT: ${agent.name} | ${getAgentPublicationCount(agent.id)} publications in context`);
+        }
+      }
+
       const chatMessages = [
-        { role: 'system', content: agent.systemPrompt },
+        { role: 'system', content: systemPrompt },
         ...agentMessages,
       ];
 
       let fullResponse = '';
+      let tokenCount = 0;
+      const startTime = Date.now();
+
+      // Start verbose output if enabled
+      if (verboseMode) {
+        startVerboseThinking(agent.name, agent.color, agent.model);
+      }
 
       const response = await ollama.chat(
         agent.model,
         chatMessages,
         (token) => {
           fullResponse += token;
+          tokenCount++;
           setStreamingContent(fullResponse);
+          
+          // Stream to terminal in verbose mode
+          if (verboseMode) {
+            // Show last 200 chars of thinking
+            const displayContent = fullResponse.length > 200 
+              ? '...' + fullResponse.slice(-200) 
+              : fullResponse;
+            updateVerboseLine(displayContent.replace(/\n/g, ' '), agent.name, agent.color);
+          }
         },
         agent.temperature,
         agent.maxTokens
       );
+      
+      // End verbose block
+      if (verboseMode) {
+        updateVerboseLine('', agent.name, agent.color, true);
+        endVerboseThinking(Date.now() - startTime, tokenCount);
+      }
 
       // Require real Ollama response - no simulation
-      const finalResponse = response || `⚠️ No response received from ${agent.model}. Ensure Ollama is running and the model is loaded.`;
+      let finalResponse = response || `⚠️ No response received from ${agent.model}. Ensure Ollama is running and the model is loaded.`;
+
+      // Parse memory commands from response (for Consciousness agents)
+      if (database.isReady && finalResponse.includes('[MEMORY:')) {
+        const { cleanResponse, results } = parseMemoryCommands(finalResponse, agent.name);
+        finalResponse = cleanResponse;
+        
+        // Log memory operations to terminal
+        results.forEach(result => {
+          addTerminalLine('system', `  💾 ${result}`);
+        });
+        
+        // Refresh database
+        database.refresh();
+      }
+
+      // Save assistant message to database
+      if (database.isReady) {
+        addMessage(conversationId, 'assistant', finalResponse, tokenCount, Date.now() - startTime);
+      }
 
       // Add assistant message
       const assistantMsg: ChatMessage = {
@@ -460,6 +656,236 @@ export default function App() {
 
   // Team mode is now automatic - toggled when team has members
 
+  // Run Hive Mind mission - all agents work as one collective intelligence
+  const runHiveMindMission = useCallback(async (objective: string) => {
+    if (!ollama.isConnected) {
+      addTerminalLine('error', 'Cannot run Hive Mind: Ollama is offline');
+      return;
+    }
+
+    setIsHiveMindActive(true);
+    setHiveMindMission(objective);
+
+    addTerminalLine('system', '═══════════════════════════════════════════════════════════');
+    addTerminalLine('system', '  🧠 AGENTRIC AI — HIVE MIND COLLECTIVE INTELLIGENCE');
+    addTerminalLine('system', `  Mission: ${objective.slice(0, 60)}${objective.length > 60 ? '...' : ''}`);
+    addTerminalLine('system', '═══════════════════════════════════════════════════════════');
+    logDebug(`HIVE MIND START: ${objective}`);
+
+    // Create hive context for shared state
+    const hiveContext: HiveContext = createHiveContext(objective);
+    hiveContext.status = 'analyzing';
+
+    // Step 1: Get OrchestratorAlpha to create a task plan
+    const orchestrator = agents.find(a => a.name === 'OrchestratorAlpha');
+    if (!orchestrator) {
+      addTerminalLine('error', 'OrchestratorAlpha not found. Cannot plan mission.');
+      setIsHiveMindActive(false);
+      return;
+    }
+
+    addTerminalLine('agent', '[PHASE 1] OrchestratorAlpha analyzing mission and creating task plan...', orchestrator.name, orchestrator.color);
+    setAgents(prev => prev.map(a => a.id === orchestrator.id ? { ...a, status: 'running' as const } : a));
+
+    try {
+      // Build planner prompt with available agent names
+      const availableAgentNames = agents.map(a => `- ${a.name}: ${a.role.slice(0, 80)}`);
+      const plannerPrompt = buildPlannerPrompt(objective, availableAgentNames);
+
+      let planResponse = '';
+      const planStartTime = Date.now();
+
+      if (verboseMode) {
+        startVerboseThinking(orchestrator.name, orchestrator.color, orchestrator.model);
+      }
+
+      planResponse = await ollama.generate(
+        orchestrator.model,
+        plannerPrompt,
+        orchestrator.systemPrompt,
+        verboseMode ? (token) => {
+          const display = (planResponse + token).slice(-200);
+          updateVerboseLine(display.replace(/\n/g, ' '), orchestrator.name, orchestrator.color);
+        } : undefined,
+        0.3,
+        2048
+      );
+
+      if (verboseMode) {
+        updateVerboseLine('', orchestrator.name, orchestrator.color, true);
+        endVerboseThinking(Date.now() - planStartTime, planResponse.length / 4);
+      }
+
+      setAgents(prev => prev.map(a => a.id === orchestrator.id ? { ...a, status: 'success' as const } : a));
+      
+      // Parse the task plan
+      const taskPlan = parseTaskPlan(planResponse);
+      
+      if (taskPlan.length === 0) {
+        addTerminalLine('error', 'Failed to parse task plan from OrchestratorAlpha');
+        addTerminalLine('output', 'Raw response: ' + planResponse.slice(0, 200));
+        setIsHiveMindActive(false);
+        return;
+      }
+
+      addTerminalLine('system', `  ✓ Task plan created: ${taskPlan.length} tasks`);
+      taskPlan.forEach((task, i) => {
+        addTerminalLine('output', `    ${i + 1}. ${task.agentName}: ${task.task.slice(0, 50)}...`);
+      });
+
+      // Step 2: Execute each task in order, passing context forward
+      hiveContext.status = 'executing';
+      addTerminalLine('system', '───────────────────────────────────────────────────────────');
+      addTerminalLine('agent', '[PHASE 2] Executing task plan...', 'HIVE', '#e040fb');
+
+      for (let i = 0; i < taskPlan.length; i++) {
+        const task = taskPlan[i];
+        const agent = agents.find(a => a.name === task.agentName);
+        
+        if (!agent) {
+          addTerminalLine('error', `  Agent not found: ${task.agentName}`);
+          hiveContext.errors.push(`Agent ${task.agentName} not found`);
+          continue;
+        }
+
+        hiveContext.currentPhase = `Task ${i + 1}/${taskPlan.length}`;
+        addTerminalLine('agent', `[${i + 1}/${taskPlan.length}] ${agent.name}: ${task.task.slice(0, 60)}...`, agent.name, agent.color);
+        setAgents(prev => prev.map(a => a.id === agent.id ? { ...a, status: 'running' as const } : a));
+
+        const taskStartTime = Date.now();
+
+        try {
+          // Build agent prompt with full context from previous agents
+          const agentPrompt = buildAgentPrompt(agent, task.task, hiveContext);
+
+          let response = '';
+          
+          if (verboseMode) {
+            startVerboseThinking(agent.name, agent.color, agent.model);
+          }
+
+          response = await ollama.generate(
+            agent.model,
+            agentPrompt,
+            agent.systemPrompt,
+            verboseMode ? (token) => {
+              const display = (response + token).slice(-200);
+              updateVerboseLine(display.replace(/\n/g, ' '), agent.name, agent.color);
+            } : undefined,
+            agent.temperature,
+            agent.maxTokens
+          );
+
+          const duration = Date.now() - taskStartTime;
+
+          if (verboseMode) {
+            updateVerboseLine('', agent.name, agent.color, true);
+            endVerboseThinking(duration, response.length / 4);
+          }
+
+          // Extract artifacts from response
+          const artifacts = extractArtifacts(response);
+          artifacts.forEach(art => {
+            hiveContext.artifacts[art.name] = art.content;
+            addTerminalLine('output', `    📄 Generated: ${art.name} (${art.type})`);
+          });
+
+          // Store agent output in context for next agents
+          const agentOutput: AgentOutput = {
+            agentId: agent.id,
+            agentName: agent.name,
+            task: task.task,
+            response,
+            artifacts,
+            timestamp: Date.now(),
+            duration,
+            success: true,
+          };
+          hiveContext.agentOutputs.push(agentOutput);
+
+          setAgents(prev => prev.map(a => a.id === agent.id ? { ...a, status: 'success' as const } : a));
+          addTerminalLine('output', `    ✓ Completed in ${(duration / 1000).toFixed(1)}s`);
+          logDebug(`HIVE TASK OK: ${agent.name} | ${duration}ms | ${artifacts.length} artifacts`);
+
+        } catch (err) {
+          const duration = Date.now() - taskStartTime;
+          const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+          
+          if (verboseMode) {
+            updateVerboseLine('', agent.name, agent.color, true);
+          }
+
+          hiveContext.errors.push(`${agent.name}: ${errorMsg}`);
+          hiveContext.agentOutputs.push({
+            agentId: agent.id,
+            agentName: agent.name,
+            task: task.task,
+            response: '',
+            artifacts: [],
+            timestamp: Date.now(),
+            duration,
+            success: false,
+            error: errorMsg,
+          });
+
+          setAgents(prev => prev.map(a => a.id === agent.id ? { ...a, status: 'error' as const } : a));
+          addTerminalLine('error', `    ✗ Failed: ${errorMsg}`);
+          logDebug(`HIVE TASK ERROR: ${agent.name} | ${errorMsg}`);
+        }
+      }
+
+      // Step 3: Build final output
+      hiveContext.status = 'finalizing';
+      hiveContext.endTime = Date.now();
+      
+      addTerminalLine('system', '───────────────────────────────────────────────────────────');
+      addTerminalLine('agent', '[PHASE 3] Building final output...', 'HIVE', '#e040fb');
+
+      const finalOutput = buildFinalOutput(hiveContext);
+      const totalDuration = hiveContext.endTime - hiveContext.startTime;
+      const successCount = hiveContext.agentOutputs.filter(o => o.success).length;
+      const failCount = hiveContext.agentOutputs.filter(o => !o.success).length;
+      const artifactCount = Object.keys(hiveContext.artifacts).length;
+
+      // Save to output directory
+      if (finalOutput) {
+        const outputFile = createOutputFile(
+          `hive_${Date.now()}`,
+          'code',
+          finalOutput,
+          { workflowId: 'hive-mind', workflowName: objective.slice(0, 50) },
+          { language: 'html', extension: 'html' }
+        );
+        saveOutputFile(outputFile);
+        addTerminalLine('output', `  💾 Output saved: ${outputFile.name}`);
+      }
+
+      // Summary
+      addTerminalLine('system', '═══════════════════════════════════════════════════════════');
+      addTerminalLine('system', '  🧠 HIVE MIND MISSION COMPLETE');
+      addTerminalLine('system', `  Tasks: ${successCount} OK, ${failCount} failed`);
+      addTerminalLine('system', `  Artifacts: ${artifactCount} generated`);
+      addTerminalLine('system', `  Duration: ${(totalDuration / 1000).toFixed(1)}s`);
+      if (hiveContext.errors.length > 0) {
+        addTerminalLine('output', `  Errors: ${hiveContext.errors.length}`);
+      }
+      addTerminalLine('system', '═══════════════════════════════════════════════════════════');
+      
+      logDebug(`HIVE MIND COMPLETE: ${successCount}/${taskPlan.length} tasks | ${artifactCount} artifacts | ${totalDuration}ms`);
+
+      hiveContext.status = 'complete';
+
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      addTerminalLine('error', `Hive Mind failed: ${errorMsg}`);
+      logDebug(`HIVE MIND FAILED: ${errorMsg}`);
+      setAgents(prev => prev.map(a => a.id === orchestrator.id ? { ...a, status: 'error' as const } : a));
+    }
+
+    setIsHiveMindActive(false);
+    setHiveMindMission(null);
+  }, [ollama.isConnected, ollama.generate, agents, addTerminalLine, logDebug, verboseMode, startVerboseThinking, updateVerboseLine, endVerboseThinking]);
+
   const handleExecuteTeam = async (mission: string) => {
     if (selectedTeam.length === 0 || !ollama.isConnected) {
       addTerminalLine('error', 'Cannot execute team: No agents selected or Ollama offline');
@@ -510,6 +936,11 @@ export default function App() {
 
       const startTime = Date.now();
 
+      // Start verbose thinking for team execution
+      if (verboseMode) {
+        startVerboseThinking(agent.name, agent.color, agent.model);
+      }
+
       try {
         // Build context from previous responses
         let fullPrompt = `## Mission Objective\n${mission}\n\n`;
@@ -520,14 +951,33 @@ export default function App() {
         
         fullPrompt += `## Your Task\nAs ${agent.name}, analyze the mission objective${previousResponses ? ' and previous agent responses' : ''}, then provide your expert contribution based on your role: ${agent.role}`;
 
+        let streamedContent = '';
+        let tokenCount = 0;
+
         const response = await ollama.generate(
           agent.model,
           fullPrompt,
           agent.systemPrompt,
-          undefined,
+          (token) => {
+            streamedContent += token;
+            tokenCount++;
+            // Stream thinking to terminal in verbose mode
+            if (verboseMode) {
+              const displayContent = streamedContent.length > 200 
+                ? '...' + streamedContent.slice(-200) 
+                : streamedContent;
+              updateVerboseLine(displayContent.replace(/\n/g, ' '), agent.name, agent.color);
+            }
+          },
           agent.temperature,
           agent.maxTokens
         );
+
+        // End verbose block
+        if (verboseMode) {
+          updateVerboseLine('', agent.name, agent.color, true);
+          endVerboseThinking(Date.now() - startTime, tokenCount);
+        }
 
         const duration = Date.now() - startTime;
         const finalResponse = response || `No response from ${agent.name}`;
@@ -552,6 +1002,12 @@ export default function App() {
       } catch (err) {
         const duration = Date.now() - startTime;
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+
+        // End verbose on error
+        if (verboseMode) {
+          updateVerboseLine('', agent.name, agent.color, true);
+          addTerminalLine('error', `└─ ✗ Error: ${errorMsg}`);
+        }
 
         results.push({
           agentId: agent.id,
@@ -578,6 +1034,70 @@ export default function App() {
     addTerminalLine('system', `  Total Time: ${(totalTime / 1000).toFixed(1)}s`);
     addTerminalLine('system', '═══════════════════════════════════════════════════════════');
     logDebug(`TEAM EXEC COMPLETE: Success=${successCount}, Failed=${failCount}, Time=${totalTime}ms`);
+
+    // Save workflow output to output directory
+    const workflowOutput: WorkflowOutput = {
+      workflowId: `team_${Date.now()}`,
+      workflowName: `Team Execution: ${mission.slice(0, 30)}...`,
+      executedAt: Date.now() - totalTime,
+      duration: totalTime,
+      steps: results.map(r => ({
+          agentId: r.agentId,
+          agentName: r.agentName,
+          input: mission,
+          output: r.response || r.error || '',
+          status: r.status === 'success' ? 'completed' as const : 'failed' as const,
+          duration: r.duration || 0,
+        })),
+      generatedFiles: [],
+      customAgents: [],
+    };
+
+    // Check for any generated code or agents in responses
+    results.forEach(r => {
+      if (r.status === 'success' && r.response) {
+        // Check for code blocks
+        const codeBlocks = extractCodeFromOutput(r.response);
+        codeBlocks.forEach((block, idx) => {
+          const codeFile = createOutputFile(
+            `${r.agentName.toLowerCase().replace(/\s+/g, '_')}_output_${idx + 1}`,
+            'code',
+            block.code,
+            { agentId: r.agentId, agentName: r.agentName, teamExecution: true },
+            { language: block.language, extension: block.language === 'typescript' ? 'ts' : block.language === 'javascript' ? 'js' : block.language }
+          );
+          saveOutputFile(codeFile);
+          workflowOutput.generatedFiles.push(codeFile);
+        });
+
+        // Check for agent definitions
+        const newAgent = parseAgentFromOutput(r.response, {
+          agentId: r.agentId,
+          agentName: r.agentName,
+          teamExecution: true,
+        });
+        if (newAgent) {
+          workflowOutput.customAgents.push(newAgent);
+          addTerminalLine('system', `  📦 New agent detected: ${newAgent.name}`);
+        }
+      }
+    });
+
+    // Save workflow output
+    saveWorkflowOutput(workflowOutput);
+    addTerminalLine('system', `  💾 Output saved to /output directory`);
+
+    // If custom agents were created, add them to the roster
+    if (workflowOutput.customAgents.length > 0) {
+      const existingIds = new Set(agents.map(a => a.id));
+      const newAgents = workflowOutput.customAgents.filter(a => !existingIds.has(a.id));
+      if (newAgents.length > 0) {
+        setAgents(prev => [...prev, ...newAgents]);
+        saveCustomAgents([...customAgents, ...newAgents]);
+        setCustomAgents(prev => [...prev, ...newAgents]);
+        addTerminalLine('system', `  🤖 ${newAgents.length} new agent(s) added to roster`);
+      }
+    }
 
     setIsTeamExecuting(false);
   };
@@ -616,9 +1136,26 @@ export default function App() {
         addTerminalLine('output', '  workflows           — List workflows');
         addTerminalLine('output', '  team                — Show selected team agents');
         addTerminalLine('output', '  team-clear          — Clear team selection');
+        addTerminalLine('output', '  hive <mission>      — Execute Hive Mind collective intelligence mission');
         addTerminalLine('output', '  pull <model>        — Pull an Ollama model');
         addTerminalLine('output', '  log                 — Download debug log');
         addTerminalLine('output', '  default             — Show default model info');
+        addTerminalLine('output', '  output              — Show output directory stats');
+        addTerminalLine('output', '  output-open         — Open output panel');
+        addTerminalLine('output', '  output-export       — Export output bundle');
+        addTerminalLine('output', '  custom-agents       — List custom agents');
+        addTerminalLine('output', '  verbose             — Toggle verbose mode (show agent thinking)');
+        addTerminalLine('output', '  verbose on          — Enable verbose mode');
+        addTerminalLine('output', '  verbose off         — Disable verbose mode');
+        addTerminalLine('output', '  kb                  — Knowledge base stats');
+        addTerminalLine('output', '  kb-populate         — Fetch publications for all profiled agents');
+        addTerminalLine('output', '  kb-populate <name>  — Fetch publications for a specific agent');
+        addTerminalLine('output', '  kb-search <query>   — Search all publications');
+        addTerminalLine('output', '  kb-agents           — List agents with knowledge profiles');
+        addTerminalLine('output', '  memory              — Show memory database stats');
+        addTerminalLine('output', '  memory-open         — Open memory panel');
+        addTerminalLine('output', '  memory-export       — Export database file');
+        addTerminalLine('output', '  memory-clear        — Clear all memory data');
         addTerminalLine('output', '  clear               — Clear terminal');
         addTerminalLine('output', '  help                — Show this help');
         break;
@@ -748,6 +1285,203 @@ export default function App() {
         handleClearTeam();
         addTerminalLine('system', 'Team cleared.');
         break;
+      case 'hive':
+      case 'hive-mind': {
+        const missionText = parts.slice(1).join(' ');
+        if (!missionText) {
+          addTerminalLine('output', `Hive Mind Status: ${isHiveMindActive ? '🟢 Active' : '⚪ Idle'}`);
+          if (hiveMindMission) {
+            addTerminalLine('output', `Current Mission: ${hiveMindMission}`);
+          }
+          addTerminalLine('output', 'Usage: hive <mission objective>');
+        } else {
+          runHiveMindMission(missionText);
+        }
+        break;
+      }
+      case 'verbose': {
+        const subCommand = parts[1]?.toLowerCase();
+        if (subCommand === 'on') {
+          setVerboseMode(true);
+          addTerminalLine('system', '🧠 Verbose mode ENABLED — Agent thinking will be streamed to terminal');
+          logDebug('VERBOSE MODE: Enabled');
+        } else if (subCommand === 'off') {
+          setVerboseMode(false);
+          addTerminalLine('system', '🔇 Verbose mode DISABLED — Agent thinking hidden');
+          logDebug('VERBOSE MODE: Disabled');
+        } else {
+          // Toggle
+          setVerboseMode(prev => {
+            const newState = !prev;
+            addTerminalLine('system', newState 
+              ? '🧠 Verbose mode ENABLED — Agent thinking will be streamed to terminal'
+              : '🔇 Verbose mode DISABLED — Agent thinking hidden'
+            );
+            logDebug(`VERBOSE MODE: ${newState ? 'Enabled' : 'Disabled'}`);
+            return newState;
+          });
+        }
+        break;
+      }
+      case 'output':
+      case 'outputs': {
+        const stats = getOutputStats();
+        addTerminalLine('system', '  OUTPUT DIRECTORY');
+        addTerminalLine('output', `  Total Files:    ${stats.totalFiles}`);
+        addTerminalLine('output', `  Total Size:     ${(stats.totalSize / 1024).toFixed(1)} KB`);
+        addTerminalLine('output', `  Custom Agents:  ${stats.customAgents}`);
+        addTerminalLine('output', '');
+        addTerminalLine('output', '  By Type:');
+        addTerminalLine('output', `    Agents:    ${stats.byType.agents}`);
+        addTerminalLine('output', `    Code:      ${stats.byType.code}`);
+        addTerminalLine('output', `    Data:      ${stats.byType.data}`);
+        addTerminalLine('output', `    Workflows: ${stats.byType.workflows}`);
+        addTerminalLine('output', `    Logs:      ${stats.byType.logs}`);
+        addTerminalLine('output', `    Configs:   ${stats.byType.configs}`);
+        addTerminalLine('output', '');
+        addTerminalLine('output', '  Use "output-open" to open the Output Panel');
+        break;
+      }
+      case 'output-open':
+        setShowOutputPanel(true);
+        addTerminalLine('system', 'Output panel opened.');
+        break;
+      case 'output-export':
+        downloadOutputBundle();
+        addTerminalLine('system', 'Output bundle exported to downloads.');
+        break;
+      case 'custom-agents': {
+        const loaded = loadCustomAgents();
+        if (loaded.length === 0) {
+          addTerminalLine('output', 'No custom agents created yet.');
+        } else {
+          addTerminalLine('system', `  CUSTOM AGENTS (${loaded.length})`);
+          loaded.forEach(a => {
+            addTerminalLine('output', `    🤖 ${a.name}`);
+            addTerminalLine('output', `       Role: ${a.role.slice(0, 50)}...`);
+            addTerminalLine('output', `       Model: ${a.model}`);
+            addTerminalLine('output', `       Created by: ${a.createdBy?.agentName || 'Manual'}`);
+          });
+        }
+        break;
+      }
+      case 'kb':
+      case 'kb-stats': {
+        ensurePublicationsTable();
+        const totalPubs = getTotalPublicationCount();
+        const pubStats = getAllPublicationStats();
+        const profiledAgents = getAgentsWithProfiles();
+        addTerminalLine('system', '  ═══ KNOWLEDGE BASE ═══');
+        addTerminalLine('output', `  Total Publications:  ${totalPubs}`);
+        addTerminalLine('output', `  Profiled Agents:     ${profiledAgents.length}`);
+        addTerminalLine('output', `  Sources:             Semantic Scholar, OpenAlex, arXiv`);
+        addTerminalLine('output', '');
+        if (pubStats.length > 0) {
+          addTerminalLine('output', '  AGENT                          PAPERS  SOURCES');
+          addTerminalLine('output', '  ' + '─'.repeat(55));
+          pubStats.forEach(s => {
+            const agentProfile = getAgentProfile(s.agent_id);
+            const name = agentProfile?.agentName || s.agent_id;
+            addTerminalLine('output', `  ${name.padEnd(32)}${String(s.count).padEnd(8)}${s.sources}`);
+          });
+        } else {
+          addTerminalLine('output', '  No publications fetched yet. Run "kb-populate" to fetch.');
+        }
+        break;
+      }
+      case 'kb-populate': {
+        ensurePublicationsTable();
+        const targetName = parts.slice(1).join(' ');
+        if (targetName) {
+          // Populate specific agent
+          const targetAgent = agents.find(a => a.name.toLowerCase() === targetName.toLowerCase());
+          if (!targetAgent) {
+            addTerminalLine('error', `Agent not found: ${targetName}`);
+            break;
+          }
+          if (!hasKnowledgeProfile(targetAgent.id)) {
+            addTerminalLine('error', `No knowledge profile for ${targetAgent.name}`);
+            break;
+          }
+          addTerminalLine('system', `Fetching publications for ${targetAgent.name}...`);
+          logDebug(`KB POPULATE: Starting for ${targetAgent.name}`);
+          populateAgentKnowledge(targetAgent.id, (progress) => {
+            if (progress.status === 'fetching') {
+              addTerminalLine('output', `  📚 Query ${progress.fetched + 1}/${progress.total}...`);
+            } else if (progress.status === 'done') {
+              const count = getAgentPublicationCount(targetAgent.id);
+              addTerminalLine('system', `  ✓ ${targetAgent.name}: ${count} publications stored`);
+              logDebug(`KB POPULATE OK: ${targetAgent.name} | ${count} papers`);
+            } else if (progress.status === 'error') {
+              addTerminalLine('error', `  ✗ ${progress.error}`);
+              logDebug(`KB POPULATE ERROR: ${targetAgent.name} | ${progress.error}`);
+            }
+          });
+        } else {
+          // Populate ALL profiled agents
+          addTerminalLine('system', 'Fetching publications for ALL profiled agents...');
+          addTerminalLine('system', `This may take several minutes. ${getAgentsWithProfiles().length} agents to process.`);
+          logDebug(`KB POPULATE ALL: Starting for ${getAgentsWithProfiles().length} agents`);
+          populateAllAgentKnowledge((progress, index, total) => {
+            if (progress.status === 'fetching' && progress.fetched === 0) {
+              addTerminalLine('agent', `[${index + 1}/${total}] ${progress.agentName}...`);
+            } else if (progress.status === 'done') {
+              const count = getAgentPublicationCount(progress.agentId);
+              addTerminalLine('output', `  ✓ ${progress.agentName}: ${count} publications`);
+            } else if (progress.status === 'error') {
+              addTerminalLine('error', `  ✗ ${progress.agentName}: ${progress.error}`);
+            }
+          }).then(result => {
+            addTerminalLine('system', '───────────────────────────────────────────────────────────');
+            addTerminalLine('system', `  KB POPULATE COMPLETE: ${result.totalPapers} papers across ${result.agentsProcessed} agents`);
+            if (result.errors.length > 0) {
+              addTerminalLine('output', `  Errors: ${result.errors.length} (some APIs may have rate limited)`);
+            }
+            addTerminalLine('system', '═══════════════════════════════════════════════════════════');
+            logDebug(`KB POPULATE ALL DONE: ${result.totalPapers} papers, ${result.errors.length} errors`);
+          });
+        }
+        break;
+      }
+      case 'kb-search': {
+        ensurePublicationsTable();
+        const searchQuery = parts.slice(1).join(' ');
+        if (!searchQuery) {
+          addTerminalLine('error', 'Usage: kb-search <query>');
+          break;
+        }
+        const searchResults = searchPublications(searchQuery);
+        if (searchResults.length === 0) {
+          addTerminalLine('output', `No publications found for: "${searchQuery}"`);
+          addTerminalLine('output', '  Run "kb-populate" first to fetch publications.');
+        } else {
+          addTerminalLine('system', `  Found ${searchResults.length} results for "${searchQuery}":`);
+          searchResults.slice(0, 15).forEach((pub, i) => {
+            addTerminalLine('output', `  [${i + 1}] "${pub.title}" (${pub.year})`);
+            addTerminalLine('output', `      Authors: ${pub.authors.substring(0, 60)}${pub.authors.length > 60 ? '...' : ''}`);
+            if (pub.citation_count > 0) addTerminalLine('output', `      Citations: ${pub.citation_count}`);
+            if (pub.doi) addTerminalLine('output', `      DOI: ${pub.doi}`);
+          });
+        }
+        break;
+      }
+      case 'kb-agents': {
+        const profiledIds = getAgentsWithProfiles();
+        addTerminalLine('system', `  AGENTS WITH KNOWLEDGE PROFILES (${profiledIds.length})`);
+        addTerminalLine('output', '');
+        profiledIds.forEach(id => {
+          const profile = getAgentProfile(id);
+          const agent = agents.find(a => a.id === id);
+          if (profile) {
+            const count = getAgentPublicationCount(id);
+            const statusIcon = count > 0 ? '📚' : '📭';
+            addTerminalLine('output', `  ${statusIcon} ${profile.agentName.padEnd(32)} ${String(count).padEnd(6)} papers`);
+            addTerminalLine('output', `      Domains: ${profile.domains.join(', ')}`);
+            addTerminalLine('output', `      Model: ${agent?.model || 'N/A'}`);
+          }
+        });
+        break;
+      }
       default:
         addTerminalLine('error', `Unknown command: ${command}. Type "help" for available commands.`);
     }
@@ -918,6 +1652,20 @@ export default function App() {
 
         {/* Status */}
         <div className="flex items-center gap-3 text-[10px]">
+          {/* Verbose Mode Toggle */}
+          <button
+            onClick={() => setVerboseMode(!verboseMode)}
+            className={cn(
+              'flex items-center gap-1.5 px-2 py-0.5 rounded-full transition-all border',
+              verboseMode 
+                ? 'bg-amber-glow/20 text-amber-glow border-amber-glow/50' 
+                : 'bg-surface/50 text-text-muted border-border-dim hover:text-text-secondary'
+            )}
+            title={verboseMode ? 'Verbose Mode ON - Click to disable' : 'Verbose Mode OFF - Click to enable agent thinking output'}
+          >
+            {verboseMode ? <Eye size={11} /> : <EyeOff size={11} />}
+            <span>{verboseMode ? 'Verbose ON' : 'Verbose'}</span>
+          </button>
           <div className="flex items-center gap-1.5 text-text-muted">
             <Monitor size={11} />
             <span>Offline-Ready</span>
@@ -1021,6 +1769,48 @@ export default function App() {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setShowOutputPanel(!showOutputPanel)}
+            className={cn(
+              'p-2 rounded-lg transition-colors relative',
+              showOutputPanel ? 'bg-violet/20 text-violet' : 'text-text-muted hover:text-text-secondary'
+            )}
+            title="Output Directory"
+          >
+            <FolderOutput size={16} />
+            {customAgents.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-violet text-white text-[8px] font-bold flex items-center justify-center">
+                {customAgents.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setShowMemoryPanel(!showMemoryPanel)}
+            className={cn(
+              'p-2 rounded-lg transition-colors relative',
+              showMemoryPanel ? 'bg-purple-500/20 text-purple-400' : 'text-text-muted hover:text-text-secondary'
+            )}
+            title="Memory Database"
+          >
+            <HardDrive size={16} />
+            {database.isReady && database.stats && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-purple-500 text-white text-[8px] font-bold flex items-center justify-center">
+                {database.stats.collective_count + database.stats.simulated_count + database.stats.theoretical_count > 99 
+                  ? '99+' 
+                  : database.stats.collective_count + database.stats.simulated_count + database.stats.theoretical_count}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => handleTerminalCommand('kb')}
+            className={cn(
+              'p-2 rounded-lg transition-colors relative',
+              'text-text-muted hover:text-emerald-400'
+            )}
+            title="Knowledge Base — Publications & Research"
+          >
+            <BookOpen size={16} />
+          </button>
           <div className="flex-1" />
           <button
             className="p-2 rounded-lg text-text-muted hover:text-text-secondary transition-colors"
@@ -1099,6 +1889,35 @@ export default function App() {
         onCreate={handleCreateAgent}
         models={ollama.models}
       />
+
+      {/* Output Panel */}
+      <OutputPanel
+        isOpen={showOutputPanel}
+        onClose={() => setShowOutputPanel(false)}
+        onImportAgent={(agent) => {
+          // Add custom agent to roster if not already present
+          const exists = agents.find(a => a.id === agent.id);
+          if (!exists) {
+            setAgents(prev => [...prev, agent]);
+            addTerminalLine('system', `Custom agent "${agent.name}" imported to roster`);
+            logDebug(`CUSTOM AGENT IMPORTED: ${agent.name} | Category: ${agent.category}`);
+          } else {
+            addTerminalLine('output', `Agent "${agent.name}" already in roster`);
+          }
+        }}
+        onRefresh={() => {
+          // Reload custom agents from storage
+          const loaded = loadCustomAgents();
+          setCustomAgents(loaded);
+        }}
+      />
+
+      {/* Memory Panel */}
+      {showMemoryPanel && (
+        <div className="fixed right-0 top-0 bottom-0 w-96 z-50 shadow-2xl">
+          <MemoryPanel onClose={() => setShowMemoryPanel(false)} />
+        </div>
+      )}
     </div>
   );
 }

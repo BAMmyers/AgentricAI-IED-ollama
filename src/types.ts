@@ -65,3 +65,67 @@ export interface TerminalLine {
   agentName?: string;
   agentColor?: string;
 }
+
+// Output System Types
+export interface OutputFile {
+  id: string;
+  name: string;
+  type: 'agent' | 'code' | 'data' | 'log' | 'workflow' | 'config';
+  content: string;
+  mimeType: string;
+  extension: string;
+  createdAt: number;
+  updatedAt: number;
+  source: {
+    workflowId?: string;
+    workflowName?: string;
+    agentId?: string;
+    agentName?: string;
+    teamExecution?: boolean;
+  };
+  metadata: {
+    size: number;
+    lines?: number;
+    language?: string;
+    isImported?: boolean;
+    version?: number;
+  };
+}
+
+export interface CustomAgent extends Agent {
+  isCustom: true;
+  outputFileId: string;
+  createdBy: {
+    workflowId?: string;
+    workflowName?: string;
+    agentId?: string;
+    agentName?: string;
+  };
+  originalPrompt?: string;
+}
+
+export interface OutputDirectory {
+  agents: OutputFile[];
+  code: OutputFile[];
+  data: OutputFile[];
+  logs: OutputFile[];
+  workflows: OutputFile[];
+  configs: OutputFile[];
+}
+
+export interface WorkflowOutput {
+  workflowId: string;
+  workflowName: string;
+  executedAt: number;
+  duration: number;
+  steps: {
+    agentId: string;
+    agentName: string;
+    input: string;
+    output: string;
+    status: 'completed' | 'failed';
+    duration: number;
+  }[];
+  generatedFiles: OutputFile[];
+  customAgents: CustomAgent[];
+}

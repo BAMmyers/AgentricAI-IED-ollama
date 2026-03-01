@@ -198,8 +198,13 @@ export const DEFAULT_AGENTS: Agent[] = [
   ),
 
   // ┌──────────────────────────────────────────────────┐
-  // │  TOOL-ENABLED  (5)                               │
+  // │  TOOL-ENABLED  (6)                               │
   // └──────────────────────────────────────────────────┘
+  makeAgent(
+    'agent-tm', 'TeamManager',
+    'Analyzes user objectives and automatically assembles the optimal team of agents. Executes cursor movements and clicks to select agents, generates refined prompts, and orchestrates multi-agent workflows autonomously. The primary interface for automated agent coordination.',
+    'Tool-Enabled', 'local', DEFAULT_MODEL, '#ff5500', 'system',
+  ),
   makeAgent(
     'agent-7', 'PythonInterpreter',
     'Generates Python 3.12 code to solve tasks and executes it in a local environment upon operator approval to return a result.',

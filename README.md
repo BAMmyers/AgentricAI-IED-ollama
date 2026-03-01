@@ -24,7 +24,7 @@
   <a href="#installation">Installation</a> •
   <a href="#features">Features</a> •
   <a href="#-team-builder--multi-agent-execution">Team Builder</a> •
-  <a href="#usage">Usage</a> •
+  <a href="#-auto-sync--github-automation">Auto-Sync</a> •
   <a href="#terminal-commands">Commands</a> •
   <a href="#contributing">Contributing</a>
 </p>
@@ -35,7 +35,45 @@
 
 ---
 
-## 🆕 What's New — v1.1
+## 🆕 What's New
+
+### v1.5 — Hive Mind Collective Intelligence
+- **Hive Mind Execution** — All agents work as one unified collective intelligence
+- **OrchestratorAlpha Task Planning** — Automatically breaks down missions into agent-specific tasks BY NAME
+- **Chain-of-Thought Context** — Each agent receives full context from all previous agents
+- **Artifact Extraction** — Automatically extracts code, files, and data from agent responses
+- **Non-Sequential Execution** — Tasks execute based on dependencies, not fixed order
+- **Terminal Command**: `hive <mission>` — Execute a complete multi-agent mission — v1.4
+
+### 🧠 Verbose Mode — Agent Thinking Visibility
+> Watch your agents think in real-time!
+
+- **Toggle Button** — Click "Verbose" in the top bar to enable/disable
+- **Live Thinking Stream** — See tokens stream to terminal as agents process
+- **Plain Text Output** — Clean, readable thinking blocks with agent name, model, and timing
+- **Terminal Commands** — `verbose`, `verbose on`, `verbose off`
+
+[📖 Full Verbose Mode Documentation](#-verbose-mode--agent-thinking-visibility)
+
+### 🔄 Auto-Sync — Automatic GitHub Updates
+> Push changes to GitHub automatically with zero effort!
+
+- **🔄 Auto-Sync Script** — Watches for changes, auto-commits and pushes
+- **⚡ Quick Push** — One-command commit with smart messages
+- **🛡️ Pre-Push Hooks** — Build verification before pushing
+- **🤖 GitHub Actions** — CI/CD for build validation and deployment
+- **📋 VS Code Tasks** — Run scripts directly from VS Code
+
+[📖 Full Auto-Sync Documentation](#-auto-sync--github-automation)
+
+### Output Directory — Runtime Code Evolution
+> Execute workflows that generate **new agents, code, and data** — all saved to a sandboxed output directory!
+
+- **📂 Output Panel** — View, preview, and manage all workflow outputs
+- **🤖 Custom Agents** — Agents created during workflows are auto-imported to roster
+- **📦 Export/Import** — Download output bundles for backup or sharing
+- **🔒 Core Immutable** — Generated code stays separate from core app code
+- **⚡ Real-time Evolution** — Workflows can create agents that join future workflows
 
 ### Team Builder — Multi-Agent Execution
 > Assemble a team of agents and execute them as a coordinated unit!
@@ -76,7 +114,7 @@ npm run dev
 
 ## Table of Contents
 
-- [What's New](#-whats-new--v11)
+- [What's New](#-whats-new--v13)
 - [Overview](#overview)
 - [Features](#features)
 - [Architecture](#architecture)
@@ -86,6 +124,8 @@ npm run dev
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [Team Builder](#-team-builder--multi-agent-execution)
+- [Output Directory](#-output-directory--runtime-code-evolution)
+- [Auto-Sync](#-auto-sync--github-automation)
 - [Terminal Commands](#terminal-commands)
 - [API Reference](#api-reference)
 - [Project Structure](#project-structure)
@@ -521,6 +561,474 @@ When you select your first agent, the **Team Panel** opens automatically:
 
 ---
 
+## 🧠 Verbose Mode — Agent Thinking Visibility
+
+**Verbose Mode** provides real-time visibility into agent reasoning, streaming the internal "thinking" process directly to the terminal as agents generate responses.
+
+### Enabling Verbose Mode
+
+**Option 1: UI Toggle**
+- Click the **"Verbose"** button in the top bar (between the model badge and Ollama status)
+- When enabled, button shows **"Verbose ON"** with amber highlight
+
+**Option 2: Terminal Command**
+```bash
+> verbose on
+🧠 Verbose mode ENABLED — Agent thinking will be streamed to terminal
+
+> verbose off
+🔇 Verbose mode DISABLED — Agent thinking hidden
+
+> verbose
+# Toggles current state
+```
+
+### What Verbose Mode Shows
+
+When an agent processes a request, the terminal displays:
+
+```
+┌─ 🧠 ThreatPatternMatcher THINKING [AgentricAIcody] ─────────────────
+│ Analyzing input and formulating response...
+💭 ...analyzing the provided code for security vulnerabilities. I notice
+   several patterns that match known CVE entries. First, the JWT validation
+   logic appears to be susceptible to...
+└─ ✓ Complete: 847 tokens in 3.42s ──────────────────
+```
+
+### Components
+
+| Element | Description |
+|---------|-------------|
+| `┌─ 🧠 ... THINKING` | Header showing agent name and model |
+| `│ Analyzing...` | Initial status message |
+| `💭 ...` | Rolling window of last 200 characters being generated |
+| `└─ ✓ Complete:` | Footer with token count and duration |
+
+### Use Cases
+
+1. **Debugging** — Understand why an agent gave a particular response
+2. **Learning** — Watch how different models approach problems
+3. **Performance** — Monitor token generation speed per model
+4. **Presentation** — Show agent reasoning during demos
+
+### Verbose Mode in Team Execution
+
+When a team workflow runs with verbose mode enabled, each agent's thinking is displayed sequentially:
+
+```
+═════════════════════════════════════════════════════════════
+  AGENTRIC AI — TEAM EXECUTION WORKFLOW
+  Mission: Analyze authentication module...
+  Team: 3 agents
+═════════════════════════════════════════════════════════════
+
+[1/3] ThreatPatternMatcher (AgentricAIcody) executing...
+┌─ 🧠 ThreatPatternMatcher THINKING [AgentricAIcody] ─────────
+│ Analyzing input and formulating response...
+💭 ...checking against 47 known vulnerability patterns...
+└─ ✓ Complete: 523 tokens in 2.14s ───────────────────────────
+  ✓ ThreatPatternMatcher: Completed (2.1s)
+
+[2/3] CodeRefactorSuggestor (qwen2.5-coder) executing...
+┌─ 🧠 CodeRefactorSuggestor THINKING [qwen2.5-coder] ─────────
+│ Analyzing input and formulating response...
+💭 ...based on the security analysis, I recommend refactoring...
+└─ ✓ Complete: 612 tokens in 2.87s ───────────────────────────
+  ✓ CodeRefactorSuggestor: Completed (2.9s)
+
+...
+```
+
+### Terminal Commands
+
+| Command | Description |
+|---------|-------------|
+| `verbose` | Toggle verbose mode on/off |
+| `verbose on` | Enable verbose mode |
+| `verbose off` | Disable verbose mode |
+
+### Performance Note
+
+Verbose mode adds minimal overhead (updating terminal text) but can make the terminal scroll rapidly during long responses. For production batch workflows, consider disabling verbose mode.
+
+---
+
+## 🧠 Hive Mind — Collective Intelligence
+
+The **Hive Mind** is AgentricAI's advanced orchestration paradigm where agents operate as a **unified collective intelligence** rather than isolated workers. The key differentiator: **OrchestratorAlpha plans and delegates tasks BY AGENT NAME**.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                       USER MISSION                                   │
+│  "Create a futuristic Tetris game with neon theme"                  │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  PHASE 1: ORCHESTRATOR ALPHA (Task Planning)                        │
+│                                                                     │
+│  Analyzes mission → Creates task plan → Assigns BY NAME             │
+│                                                                     │
+│  Output JSON:                                                       │
+│  [                                                                  │
+│    {"agentName": "TheAlchemist", "task": "Design game arch"},       │
+│    {"agentName": "SnippetCoder", "task": "Generate game code"},     │
+│    {"agentName": "Visualizer", "task": "Create neon CSS"},          │
+│    {"agentName": "Bug", "task": "Check for errors"},                │
+│    {"agentName": "ResponseValidatorAgent", "task": "Final check"}   │
+│  ]                                                                  │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  PHASE 2: TASK EXECUTION (Chain-of-Thought)                         │
+│                                                                     │
+│  Each agent receives FULL CONTEXT:                                  │
+│  • Original mission                                                 │
+│  • Their specific task                                              │
+│  • ALL previous agent outputs                                       │
+│  • Generated artifacts so far                                       │
+│  • Errors to fix                                                    │
+│                                                                     │
+│  TheAlchemist → SnippetCoder → Visualizer → Bug → Validator         │
+│       ↓              ↓             ↓          ↓          ↓          │
+│   [design]      [game.js]     [style.css]  [fixes]    [✓/✗]        │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  PHASE 3: OUTPUT ASSEMBLY                                           │
+│                                                                     │
+│  • Extracts all code artifacts from responses                       │
+│  • Combines HTML + CSS + JS                                         │
+│  • Saves to /output directory                                       │
+│  • Returns complete, runnable application                           │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Terminal Command
+
+```bash
+hive Create a Snake game with retro pixel art style
+```
+
+### Agent Roles in Hive Mind
+
+| Role | Agents | Function |
+|------|--------|----------|
+| **Orchestrator** | OrchestratorAlpha, AgentricAI_001 | Plan tasks, delegate BY NAME |
+| **Monitor** | Bug, Security_Sentinel, Logger, Mechanic | Background checks |
+| **Consciousness** | Collective/Simulated/Theoretical | Persistent memory |
+| **Executor** | SnippetCoder, TheAlchemist, Visualizer | Perform actual work |
+| **Validator** | ResponseValidator, PolicyGatekeeper | Validate outputs |
+
+### HiveContext Structure
+
+Every agent in the Hive Mind receives a **HiveContext** prompt:
+
+```
+## YOUR IDENTITY
+Name: SnippetCoder
+Role: Generates small code snippets...
+Category: Development \ Code
+
+## MISSION OBJECTIVE
+Create a Snake game with retro pixel art style
+
+## YOUR CURRENT TASK
+Generate the main game loop and rendering code
+
+## PREVIOUS AGENT OUTPUTS (CHAIN OF THOUGHT)
+### TheAlchemist:
+[Full architecture design...]
+
+## GENERATED ARTIFACTS SO FAR
+### game_design.md
+[Content...]
+
+## INSTRUCTIONS
+1. Complete your task thoroughly
+2. Output COMPLETE, WORKING code
+3. Wrap code in appropriate code blocks
+```
+
+### Data Flow
+
+```typescript
+// HiveExecutor creates context
+const context: HiveContext = {
+  mission: "Create a Tetris game...",
+  artifacts: {},              // Accumulates generated code
+  agentOutputs: [],           // All agent responses
+  errors: [],                 // Errors to fix
+  status: 'executing',
+  currentPhase: 'Task 2/5',
+};
+
+// Each agent adds to context
+context.agentOutputs.push({
+  agentName: 'TheAlchemist',
+  response: '## Architecture...',
+  artifacts: [{ name: 'design.md', content: '...' }]
+});
+
+// Next agent sees all previous context
+const prompt = buildAgentPrompt(agent, task, context);
+```
+
+---
+
+## 📂 Output Directory — Runtime Code Evolution
+
+The **Output Directory** system provides a sandboxed location for workflow-generated content, enabling real-time code evolution without risking the core application.
+
+### How It Works
+
+When a workflow or team execution completes:
+1. **Results are saved** as timestamped output entries
+2. **Custom agents** in the output are auto-detected and importable
+3. **Files are downloadable** individually or as bundles
+4. **Core code remains immutable** — generated code stays separate
+
+### Output Types
+
+| Type | Extension | Purpose |
+|------|-----------|---------|
+| `agent` | `.agent.json` | Custom agent definitions (auto-importable) |
+| `workflow` | `.workflow.json` | Workflow execution results |
+| `code` | `.ts`, `.tsx`, `.js` | Generated code files |
+| `data` | `.json`, `.yaml` | Structured data outputs |
+| `report` | `.md`, `.txt` | Analysis reports and logs |
+
+### Output Panel
+
+Access via the **📂 Output** button in the activity bar:
+
+| Feature | Description |
+|---------|-------------|
+| **Output List** | All saved outputs with timestamps |
+| **Preview Pane** | View content without downloading |
+| **Import Agent** | One-click import of custom agents to roster |
+| **Download** | Export individual files |
+| **Export Bundle** | Download all outputs as ZIP |
+| **Clear** | Remove old outputs |
+
+### Terminal Commands
+
+| Command | Description |
+|---------|-------------|
+| `outputs` | List all saved outputs |
+| `output <id>` | Preview a specific output |
+| `output-clear` | Clear all outputs |
+| `output-export` | Download outputs bundle |
+
+### Example: Agent Creation Workflow
+
+```
+Mission: "Create a new agent that specializes in Rust code review"
+
+Team:
+1. AgentDesigner → Designs agent spec
+2. SnippetCoder → Generates system prompt
+3. ResponseValidatorAgent → Validates the design
+
+Output:
+{
+  "type": "agent",
+  "name": "RustReviewer",
+  "role": "Reviews Rust code for safety, performance, and idiomatic patterns",
+  "model": "qwen2.5-coder",
+  "category": "Development \\ Code"
+}
+
+→ Auto-imported to roster as custom agent!
+```
+
+---
+
+## 🔄 Auto-Sync — GitHub Automation
+
+Keep your repository automatically synchronized with zero manual effort.
+
+### Quick Start
+
+```bash
+# One-time sync (commit + push)
+.\scripts\quick-push.ps1
+
+# Watch mode (continuous auto-sync)
+.\scripts\auto-sync.ps1
+
+# Custom interval (60 seconds)
+.\scripts\auto-sync.ps1 -Interval 60
+```
+
+### Available Scripts
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `scripts/auto-sync.ps1` | Windows PowerShell | Watch mode with auto-commit/push |
+| `scripts/auto-sync.sh` | Linux/Mac Bash | Watch mode with auto-commit/push |
+| `scripts/quick-push.ps1` | Windows PowerShell | One-command commit + push |
+| `scripts/setup-hooks.ps1` | Windows PowerShell | Install Git hooks |
+
+### Auto-Sync Features
+
+- **🔍 Change Detection** — Monitors files every 30 seconds (configurable)
+- **📝 Smart Commit Messages** — Auto-generates messages based on changed files:
+  - Agent changes → `agents: Updated agent roster`
+  - Output files → `output: New workflow output`
+  - README changes → `docs: Updated documentation`
+  - Code changes → `feat: Code updates`
+- **🔄 Auto-Pull** — Pulls latest before pushing to prevent conflicts
+- **📊 Visual Feedback** — Color-coded output showing what changed
+
+### GitHub Actions
+
+Two workflows are included in `.github/workflows/`:
+
+#### `ci.yml` — Continuous Integration
+```yaml
+Triggers: Push to main/dev, Pull requests
+Actions:
+  ✓ Checkout code
+  ✓ Install dependencies
+  ✓ Type check (tsc --noEmit)
+  ✓ Lint (eslint)
+  ✓ Build
+  ✓ Upload artifacts
+```
+
+#### `deploy.yml` — GitHub Pages Deployment
+```yaml
+Triggers: Push to main, Manual dispatch
+Actions:
+  ✓ Build production bundle
+  ✓ Deploy to GitHub Pages
+```
+
+### Git Hooks
+
+Install pre-push validation:
+
+```bash
+.\scripts\setup-hooks.ps1
+```
+
+This creates:
+- **pre-push** — Runs `npm run build` before allowing push (prevents broken code)
+- **post-commit** — Logs all commits to `.git/commit-log.txt`
+
+### VS Code Integration
+
+Run tasks directly from VS Code (`Ctrl+Shift+P` → "Tasks: Run Task"):
+
+| Task | Description |
+|------|-------------|
+| Auto-Sync (Watch Mode) | Start continuous sync |
+| Quick Push | Commit and push all changes |
+| Setup Git Hooks | Install pre-push validation |
+| Dev Server | Start Vite dev server |
+| Build | Production build |
+| Start Ollama | Launch Ollama server |
+
+### Example Session
+
+```powershell
+PS> .\scripts\auto-sync.ps1
+
+    _                    _        _        _    ___ 
+   / \   __ _  ___ _ __ | |_ _ __(_) ___  / \  |_ _|
+  / _ \ / _` |/ _ \ '_ \| __| '__| |/ __| / _ \  | | 
+ / ___ \ (_| |  __/ | | | |_| |  | | (__ / ___ \ | | 
+/_/   \_\__, |\___|_| |_|\__|_|  |_|\___/_/   \_\___|
+        |___/                                        
+                    Auto-Sync v1.0
+
+Pulling latest from origin/main...
+Watching for changes every 30 seconds...
+Press Ctrl+C to stop.
+
+[2024-01-15 14:32:15] Changes detected...
+  Modified: src/App.tsx
+  New:      src/components/NewFeature.tsx
+[2024-01-15 14:32:16] Committed: feat: Code updates (2 files)
+[2024-01-15 14:32:16] Pushing to origin/main...
+[2024-01-15 14:32:18] Pushed successfully!
+
+[2024-01-15 14:32:45] No changes detected.
+```
+
+---
+
+## 📚 Knowledge Base — Academic Publications
+
+AgentricAI includes a **real-time academic knowledge base** that fetches peer-reviewed publications from free, public APIs and stores them in SQLite for offline access. When agents with knowledge profiles are invoked, relevant papers are automatically injected into their context.
+
+### Public API Sources (No API Keys Required)
+
+| Source | URL | Coverage |
+|--------|-----|----------|
+| **Semantic Scholar** | api.semanticscholar.org | 200M+ papers with abstracts, citations |
+| **OpenAlex** | api.openalex.org | 250M+ fully open scholarly works |
+| **arXiv** | export.arxiv.org | 2M+ preprints in physics, CS, math |
+
+### Agents with Knowledge Profiles (36 agents)
+
+| Category | Agents | Domains |
+|----------|--------|---------|
+| **Academic \ Research** (7) | DrEvelynReedPhysics, DrArisThorneBiology, DrKenjiTanakaChemistry, DrLenaPetrovaCompSci, DrSamuelCarterAstronomy, ProfessorEleanorVanceHistory, DrMarcusColePsychology | Physics, Biology, Chemistry, CS, Astronomy, History, Psychology |
+| **Quantum Studies** (8) | All 8 quantum specialists | QFT, Wave mechanics, Entanglement, Qubits, Algorithms, Vacuum, Energy |
+| **Security** (4) | ThreatPatternMatcher, AnomalyDetectionEngine, Security_Sentinel_001, BitForceAction | Malware, IDS, SOC, Digital forensics |
+| **Consciousness** (3) | Collective, Simulated, Theoretical | Knowledge graphs, Simulation theory, Philosophy of mind |
+| **Development** (2) | TheAlchemist, AgentDesigner | Software architecture, Multi-agent systems |
+| **Content** (4) | ContentSummarizer, SentimentAnalyzer, TextTranslator, PromptRefiner | NLP, Summarization, Translation, Prompt engineering |
+| **Governance** (3) | EthicalComplianceOfficer, EnvironmentalImpactAnalyser, RegulatoryAffairsSpecialist | AI ethics, Environmental science, Regulation |
+| **Core** (2) | OrchestratorAlpha, APIGateway | Orchestration, API design |
+| **Data** (2) | Universal_Data_Adapter, RecursiveWebCrawler | ETL, Web crawling |
+| **Research** (1) | NickTesla | EM theory, Wireless energy |
+
+### Terminal Commands
+
+| Command | Description |
+|---------|-------------|
+| `kb` | Show knowledge base statistics |
+| `kb-populate` | Fetch publications for ALL profiled agents |
+| `kb-populate <agent>` | Fetch publications for a specific agent |
+| `kb-search <query>` | Search stored publications by title/author/abstract |
+| `kb-agents` | List all agents with knowledge profiles |
+
+### How It Works
+
+```
+1. Run "kb-populate" in terminal (fetches from all 3 APIs)
+2. Papers stored in SQLite publications table
+3. On agent chat, relevant papers auto-injected into system prompt
+4. Agent grounds responses in real published research
+5. All data persists offline in IndexedDB (survives restarts)
+```
+
+### Example
+
+```bash
+> kb-populate DrEvelynReedPhysics
+  📚 Query 1/6: "quantum mechanics foundations"...
+  📚 Query 2/6: "general relativity gravitational waves"...
+  ✓ DrEvelynReedPhysics: 47 publications stored
+
+> kb-search quantum entanglement
+  Found 12 results for "quantum entanglement":
+  [1] "Quantum entanglement" (2009)
+      Authors: Horodecki, R., Horodecki, P., Horodecki, M.
+      Citations: 5847
+      DOI: 10.1103/RevModPhys.81.865
+```
+
+---
+
 ## Terminal Commands
 
 | Command | Description |
@@ -538,6 +1046,19 @@ When you select your first agent, the **Team Panel** opens automatically:
 | `default` | Show default model information |
 | `team` | Show current team selection with agent names |
 | `team-clear` | Clear all selected team agents |
+| `hive <mission>` | Execute Hive Mind collective intelligence mission |
+| `verbose` | Toggle verbose mode (show agent thinking) |
+| `verbose on` | Enable verbose mode |
+| `verbose off` | Disable verbose mode |
+| `outputs` | List all saved outputs with timestamps |
+| `output <id>` | Preview a specific output |
+| `output-clear` | Clear all outputs from storage |
+| `output-export` | Download all outputs as bundle |
+| `kb` | Show knowledge base statistics |
+| `kb-populate` | Fetch publications for all profiled agents |
+| `kb-populate <name>` | Fetch for a specific agent |
+| `kb-search <query>` | Search all stored publications |
+| `kb-agents` | List agents with knowledge profiles |
 
 ### Example Session
 
@@ -644,6 +1165,18 @@ AgentricAI communicates with Ollama via HTTP:
 
 ```
 agentric-ai/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml               # Continuous integration (build + lint)
+│       └── deploy.yml           # GitHub Pages deployment
+├── .vscode/
+│   ├── settings.json            # VS Code workspace settings
+│   └── tasks.json               # VS Code tasks (auto-sync, build, etc.)
+├── scripts/
+│   ├── auto-sync.ps1            # Windows auto-sync (watch mode)
+│   ├── auto-sync.sh             # Linux/Mac auto-sync (watch mode)
+│   ├── quick-push.ps1           # One-command commit + push
+│   └── setup-hooks.ps1          # Install Git hooks
 ├── public/
 │   └── logo.svg                 # AgentricAI logo
 ├── src/
@@ -651,12 +1184,21 @@ agentric-ai/
 │   │   ├── CodeWorkspace.tsx    # Tabbed editor + chat view
 │   │   ├── CreateAgentModal.tsx # Agent creation form
 │   │   ├── FileTree.tsx         # File explorer component
+│   │   ├── OutputPanel.tsx      # Output directory browser
 │   │   ├── Sidebar.tsx          # Agent roster with team toggles
 │   │   ├── TeamPanel.tsx        # Multi-agent team builder & executor
 │   │   ├── TerminalPanel.tsx    # Command-line interface
 │   │   └── WorkflowPanel.tsx    # Workflow builder
 │   ├── data/
-│   │   └── agentRoster.ts       # 101 agent definitions
+│   │   ├── agentRoster.ts       # 101 agent definitions
+│   │   ├── agentKnowledge.ts    # Agent knowledge profiles (36 agents)
+│   │   └── outputManager.ts     # Output directory management
+│   ├── services/
+│   │   ├── knowledgeBase.ts     # Semantic Scholar + OpenAlex + arXiv API
+│   │   └── memoryService.ts     # Consciousness memory operations
+│   ├── db/
+│   │   ├── database.ts          # SQLite (sql.js WASM) + IndexedDB
+│   │   └── schema.sql           # Database schema
 │   ├── hooks/
 │   │   └── useOllama.ts         # Ollama API integration
 │   ├── utils/
@@ -721,6 +1263,47 @@ Edit CSS variables in `src/index.css`:
   --color-violet: #8b5cf6;
 }
 ```
+
+---
+
+## Testing
+
+### Comprehensive System Test
+
+A full test suite is included that validates the entire AgentricAI platform:
+
+```bash
+# Run the test suite (requires tsx)
+npx tsx test-suite.ts
+```
+
+**Test Output Files:**
+- `test-output.txt` — Verbose documentation of all test phases
+- `output/test-crypto-tracker.html` — Generated sample application
+
+**Test Phases:**
+| Phase | Description | Validation |
+|-------|-------------|------------|
+| 1 | System Integrity | Agent roster (101), categories (19), Ollama connection |
+| 2 | Orchestrator Planning | Task breakdown via OrchestratorAlpha |
+| 3 | Hive Mind Execution | Sequential agent execution with context passing |
+| 4 | Output Assembly | HTML/CSS/JS artifact combination |
+| 5 | Consciousness Memory | Agent output archival and persistence |
+| 6 | Security Validation | Code security scan (eval, XSS, secrets) |
+| 7 | Final Report | Summary with pass/fail status |
+
+**Sample Test Task:**
+> "Create a real-time cryptocurrency portfolio tracker with cyberpunk neon theme"
+
+**Agents Exercised:**
+- TheAlchemist → Blueprint/architecture
+- JSONDataGenerator → Mock data structure
+- SnippetCoder → HTML generation
+- Visualizer → CSS theming
+- DataConnector → JavaScript logic
+- CodeCommenter → Documentation
+- Bug → Error scanning
+- ResponseValidatorAgent → Requirements validation
 
 ---
 

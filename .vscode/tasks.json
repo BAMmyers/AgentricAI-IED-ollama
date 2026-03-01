@@ -1,0 +1,85 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Auto-Sync (Watch Mode)",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/auto-sync.ps1"],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "focus": false
+      },
+      "problemMatcher": [],
+      "detail": "Watches for changes and auto-pushes to GitHub"
+    },
+    {
+      "label": "Quick Push",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/quick-push.ps1"],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "detail": "Stage, commit, and push all changes"
+    },
+    {
+      "label": "Setup Git Hooks",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/setup-hooks.ps1"],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "detail": "Install pre-push build check hook"
+    },
+    {
+      "label": "Dev Server",
+      "type": "npm",
+      "script": "dev",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": [],
+      "detail": "Start Vite dev server"
+    },
+    {
+      "label": "Build",
+      "type": "npm",
+      "script": "build",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "detail": "Production build"
+    },
+    {
+      "label": "Start Ollama",
+      "type": "shell",
+      "command": "ollama",
+      "args": ["serve"],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": [],
+      "detail": "Start the Ollama server"
+    }
+  ]
+}
